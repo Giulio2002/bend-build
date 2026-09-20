@@ -13,7 +13,7 @@ Record the Bend version, compiler revision when available, target architecture, 
 
 Follow a representative operation through source, generated C, optimized assembly, and timing. Establish which operations are intrinsic, how fixed records are flattened, whether arrays are contiguous on the target backend, how affine values move or clone, and where calls allocate. Never infer constant-time indexing or packed storage merely from an API named `Array`.
 
-If compiler source is unavailable locally, locate the matching upstream revision. Keep compiler modifications separate and disclose them; do not quietly depend on a local fork. Use the installed CLI's help instead of guessing commands.
+If compiler source is unavailable locally, locate the matching upstream revision. Honor stock-Bend-only requirements: do not modify the compiler, hide postprocessing of generated C, or treat a local fork as stock. If compiler changes are explicitly authorized, keep them separate and disclose them. Use the installed CLI's help instead of guessing commands.
 
 ## Representation and API rules
 
