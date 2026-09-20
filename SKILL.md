@@ -1,86 +1,67 @@
 ---
-name: bend-performance-proofs
-description: Design, optimize, benchmark, and formally verify Bend libraries using efficient native representations and generated-code inspection. Use for performance-sensitive Bend algorithms, cryptography, serialization, or data structures with correctness laws.
+name: bend-build
+description: Guidelines for building efficient, maintainable software in Bend. Use when designing or implementing Bend libraries, algorithms, cryptography, serialization, or data structures; covers representation choices, language internals, generated code, performance, and proofs when required.
 ---
 
-# Fast, proved Bend libraries
+# Build good software in Bend
 
-Deliver an efficient implementation and laws that describe the actual public implementation. Do not choose a slow representation merely because it makes induction or definitional equality easy. Design from the algorithm's dataflow, memory requirements, and machine operations; then build the proof around that design. Respect the user's narrower scope and explicit overrides.
+Build the complete thing the user asked for. Start from the problem, the algorithm, and how the machine will execute it. Keep the design small, direct, fast, and understandable. These guidelines apply to implementation work; they do not turn every task into a formal-verification project.
 
-## Learn the language that is actually installed
+## Understand before building
 
-Record the Bend version, compiler revision when available, target architecture, and backend. Read the installed guide, Base definitions, compiler lowering, and relevant runtime source before assuming how a datatype behaves. Distinguish Bend versions and forks: available integer widths, arrays, effects, ownership, and native lowering can differ.
+- Read the existing project and establish the intended public API, inputs, outputs, error behavior, workload, and constraints. Reuse working code and preserve already-proven properties.
+- Check what Bend already provides before implementing a collection, primitive, or abstraction. Prefer suitable native facilities; inspect their actual semantics and costs.
+- Study the installed language: its guide, Base definitions, compiler lowering, runtime, and representative working programs. Follow important operations into generated C. Do not import assumptions from another language or another Bend version.
+- Record the relevant compiler version and target. Stock Bend means stock Bend: no hidden compiler fork, patched generated C, or unsupported extensions. Explore compiler modifications only when explicitly authorized.
 
-Follow a representative operation through source, generated C, optimized assembly, and timing. Establish which operations are intrinsic, how fixed records are flattened, whether arrays are contiguous on the target backend, how affine values move or clone, and where calls allocate. Never infer constant-time indexing or packed storage merely from an API named `Array`.
+## Design from first principles
 
-If compiler source is unavailable locally, locate the matching upstream revision. Honor stock-Bend-only requirements: do not modify the compiler, hide postprocessing of generated C, or treat a local fork as stock. If compiler changes are explicitly authorized, keep them separate and disclose them. Use the installed CLI's help instead of guessing commands.
+Work out the algorithm's dataflow, access patterns, ownership, intermediate state, and asymptotic costs before choosing representations. Choose a representation because it fits those operations, not because it is familiar, convenient to recurse over, or easy to prove.
 
-## Representation and API rules
+Aim for a small public API and a direct execution path. Avoid unnecessary frameworks, wrapper layers, duplicated implementations, compatibility representations, and generators that add more complexity than they remove. Helpers should clarify the algorithm or improve actual generated code. More abstraction is not automatically better; neither is blindly inlining everything.
 
-- No FFI implementation of the target algorithm. External implementations are allowed as independent test or benchmark references. Host scripts may orchestrate builds and validation; they must not compute the result in place of Bend.
-- Do not use linked lists for bytes, words, vectors, indexed state, tables, or serialization buffers. Use packed arrays, slices where supported, or fixed records. Use a linked structure only where the chosen algorithm actually needs its operations or semantics; explain that need.
-- Native maps and other suitable built-ins take precedence over unnecessary replacements, after checking their semantics and performance. A native map does not automatically make every structure built on it efficient.
-- Keep public input and output compact. A fast internal decoder followed by expansion into byte lists is still a slow, allocation-heavy public API. Remove unnecessary conversions rather than excluding them from the measured path.
-- Define byte order, logical length, capacity, padding, ownership, empty input, partial words, and invalid-input behavior explicitly. Ignore unused capacity only where specified; test dirty unused bytes.
-- Use fixed scalar state for small fixed-width algorithms when it lowers well. A fixed record is not a linked-list substitute: inspect whether it becomes registers, stack storage, or repeated allocations.
-- Track allocation, peak memory, and copying as algorithmic costs. State precisely whether a memory budget means process RSS, incremental overhead, live heap, or retained output.
+Do not mistake a convenient proof model for the implementation architecture. When proofs are required, build the efficient algorithm and prove it. Do not weaken the algorithm, its API, or its performance target to obtain easier laws.
 
-Proof-only lists or trees can be useful mathematical models. Keep them out of the production import graph, and prove the representation bridge to the actual runtime API. A theorem about a historical list implementation does not establish the correctness of a new packed implementation.
+## Representation rules
 
-## Optimize from evidence
+- **No linked lists for array-shaped work.** Bytes, words, buffers, indexed state, vectors, lookup tables, and serialized data need packed arrays, supported slices, or suitable fixed records. Use linked structures only when the algorithm actually needs their operations or semantics.
+- **No FFI for the implementation.** Do not hand the requested algorithm to C, Rust, Python, a crypto library, or another foreign implementation. External libraries may serve as independent test and benchmark references. Build scripts must not compute the result in place of Bend.
+- Keep the entire public path efficient, including inputs and outputs. A fast internal operation followed by expansion into byte lists is not a fast API. Remove pointless conversions instead of hiding them outside the benchmark.
+- Use fixed scalar records for small fixed state when they lower well. Use native arrays for indexed storage and suitable native maps for lookup. Inspect the lowering: names such as `Array` do not by themselves establish contiguous storage, constant-time indexing, or cheap updates.
+- Follow affine ownership deliberately. Know what is consumed, shared, cloned, allocated, and retained. Do not repeatedly copy a large buffer to make a helper signature convenient.
+- Specify byte order, logical length versus capacity, partial words, empty input, bounds, padding, and invalid-input behavior. Do not leave these as accidental implementation details.
+- Treat memory consumption, copying, and allocation as design costs from the start. Define memory targets precisely: process RSS, incremental overhead, live heap, and retained output are different measurements.
 
-Start with a pinned correct baseline and an independent, credible optimized reference. Establish the input sizes, operations, execution target, memory budget, and ratio definition. “At most 2x slower” should be recorded unambiguously as `candidate_time / reference_time <= 2` for the agreed workload set.
+Proof-only lists and trees can be useful models when verification is requested. They must not leak into the production representation or import graph; a theorem about a model needs a bridge to the implementation users actually call.
 
-Inspect the generated hot path for:
+## Build the whole path
 
-- Repeated traversal, boxing, copying, allocation, and conversion.
-- Generic arithmetic or rotation helpers that failed to become native operations.
-- Large state passed between helper functions, missed inlining, and repeated round dispatch.
-- Register pressure, spills, live temporary ranges, cache traffic, and code size.
-- Native word-width mismatches and instructions used by the reference.
+Implement the public API through to its actual result. Exercise it with real inputs early, including empty, boundary, partial, and invalid cases. Finish the required operations rather than polishing one helper indefinitely. Keep the project organized around the code's responsibilities, with implementation, tests, and benchmarks easy to find; add specification and proof directories only when they serve the task.
 
-Make one attributable change at a time. Fixed rotations, loop specialization, loop fusion, row-wise scheduling, rolling windows, and alternate bit layouts are candidates, not universal improvements. Unrolling can increase spills or instruction-cache pressure. Fewer source lines, helpers, or arithmetic operations do not guarantee faster native code.
+Do not stop at scaffolding, TODOs, checkpoint commits, a toy example, or a private fast path that callers cannot use. Track what remains against the user's full objective. Preserve useful work while simplifying; remove obsolete production paths once their replacements are established.
 
-Do not edit generated C to obtain a result advertised as a Bend implementation. Experimental C edits may diagnose compiler behavior, but the accepted optimization must be reproducible from checked Bend source and the declared toolchain. Do not silently introduce hardware acceleration; identify the instructions, dispatch, fallback, and additional trust boundary when it is explicitly in scope.
+## Make performance real
 
-Prefer repeated paired measurements of old and new binaries on the same host. Keep an optimization only when the gain survives measurement noise, required correctness checks, proof checking, and the relevant workloads. Archive useful rejected experiments as evidence without leaving them on the production path.
+Inspect the emitted C and optimized assembly for the hot path. Look for traversal, boxing, allocation, copying, helper transitions, generic arithmetic, failed inlining, large state transfers, register spills, and code size. Read the corresponding language source to understand why the compiler generated them.
 
-## Prove the efficient implementation
+Use a credible optimized reference and comparable inputs. Distinguish algorithm variants—Ethereum Keccak-256 is not SHA3-256—and software-only versus hardware-accelerated baselines. Pin versions, flags, and machine details. Do not slow the reference or change the workload to meet a ratio.
 
-Write a separate, reviewable specification from the algorithm definition. Share neutral datatypes where helpful; avoid a specification that calls the production implementation or duplicates its optimized scheduling verbatim.
+Measure the real public operation, stating which preparation, cloning, output allocation, conversion, and startup costs are included. Retain outputs so the compiler cannot eliminate the work. Use long enough batches for timer resolution, warmups, repeated alternating measurements, and raw samples. Verify full outputs independently; a benchmark checksum alone is not a correctness test.
 
-State universal laws over the actual exported functions, including rejection behavior and all output bytes or words. Compose proofs through meaningful boundaries: representation, primitive operations, a round, repeated rounds, absorption or traversal, padding or termination, and public output. Instantiate symbolic component theorems at the real public parameters without expanding every round in the kernel when a composition proof suffices.
+Optimize one attributable change at a time. Fixed rotations, specialization, fusion, rolling windows, scheduling, and alternative layouts are hypotheses to measure. Unrolling can worsen spills and code size. Keep supported improvements, reject regressions, and do not assume fewer source-level operations mean faster execution.
 
-Keep the specification and required laws stable during optimization. Changing an internal representation calls for a bridge theorem, not weaker input quantification or a new specification tailored to make the candidate trivially correct. Do not introduce axioms, admitted holes, unsafe proof declarations, test-derived “proofs,” or opaque external correctness assumptions.
+Record performance targets as explicit ratios over agreed workloads, for example `Bend time / reference time <= 2`. Report failing rows and the worst case. If the target remains unmet, say so; do not claim a proof, a passing test, or a favorable average satisfies it.
 
-Run the actual kernel proof gate. Check that it reaches the public API theorem and the production files shipped to consumers. Re-run after source changes. Use targeted mutations—wrong rotation, round constant, padding bit, output order, index, length check, or round count—to test whether the claimed proof boundary detects real errors. A timeout is not evidence of logical rejection.
+## When proofs are required
 
-Report the exact proof boundary. Distinguish:
+Keep the user's laws and semantics stable. Prove the actual exported implementation against a separate, reviewable specification. Compose representation, primitive, loop, and public-API theorems instead of expanding an entire computation unnecessarily. Efficient proof structure should support the chosen implementation, not dictate a slower one.
 
-- Universal refinement of the public API to an independent specification.
-- A component theorem or proof about a model only.
-- A missing representation bridge.
-- Differential tests and finite examples.
-- Trusted kernel, standard library, compiler/runtime, native toolchain, and CPU.
+Do not add axioms, unsafe declarations, admitted holes, or a specification that calls the implementation it is supposed to validate. Run the kernel gate and use targeted mutations to check that claimed properties detect real mistakes. A timeout is not a logical rejection.
 
-Do not call source-level refinement a proof of the compiler, constant-time execution, or cryptographic security. Formal functional correctness and performance measurements support different claims.
+Be exact about what is established: universal public-API refinement, a component/model theorem, an unproved representation bridge, or finite differential tests. Keep the trusted compiler, runtime, toolchain, and hardware explicit. Functional correctness does not establish cryptographic security, constant-time execution, or compiler correctness.
 
-## Benchmark honestly
+## Deliver something usable
 
-Use the same algorithm variant, byte contents, workload sizes, and observable outputs. Ethereum Keccak-256 and SHA3-256 are different algorithms. Pin reference revisions and record compiler flags, versions, CPU, architecture, and any hardware acceleration.
+Provide a tested minimal usage example, straightforward build/test commands, and reproducible benchmarks where performance matters. Avoid machine-specific paths in instructions. Ensure evidence corresponds to the shipped source, not a previous binary or abandoned experiment.
 
-Measure the real public operation. Declare whether input preparation, cloning, output allocation, format conversion, initialization, and process startup are included. If the two implementations have different ownership or allocation contracts, disclose the difference rather than calling the workloads identical. Offer isolated-kernel measurements only as separately labeled diagnostics.
-
-Use sufficiently long batches for the timer resolution, warmups, alternating run order, multiple samples, and a robust statistic. Retain raw samples. Validate outputs outside the timed region where possible, and ensure the compiler cannot discard the work. A retained checksum helps prevent dead-code elimination; full-output differential tests are still necessary.
-
-Do not weaken the comparator to meet a ratio. A portable scalar C reference, a hardware-accelerated library, and a standard-library default are distinct baselines. Label them. Do not infer an ARM-versus-x86 result without measurements on both hosts.
-
-Store source and binary identities with benchmark evidence so stale results cannot be mistaken for a changed implementation. Report worst-case ratios and failing rows, not just favorable averages. If a required target is unmet, say so and preserve the remaining work; do not rename the target into a claimed success.
-
-## Ship reproducibly
-
-Keep implementation, independent specification, proofs, tests, benchmarks, and build tools clearly separated. Include a tested minimal usage example, exact proof and test commands, benchmark reproduction instructions, and a concise account of known limits.
-
-Before an authorized publication, verify a clean consumer can build/import the shipped source, check the actual release commit, and ensure proof and benchmark evidence correspond to it. Respect repository visibility and publish only within the user's authorization. For content-addressed packages, verify the downloaded source and record the immutable package identifier; updating documentation does not change an already published package.
-
-Finish with the measured improvement, target status, proof scope, remaining limitations, and links to the published artifacts. Do not substitute a checkpoint or partial theorem for the user's complete objective.
+Publish only within the user's authorization and chosen visibility. Check the actual uploaded commit and a clean consumer build/import when packaging. Report what works, measured performance, any requested proof coverage, and unfinished requirements plainly. Do not label an incomplete objective complete.
