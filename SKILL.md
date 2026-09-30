@@ -1,6 +1,6 @@
 ---
 name: bend-build
-description: Guidelines for building efficient, maintainable software in Bend. Use when designing or implementing Bend libraries, algorithms, cryptography, serialization, or data structures; covers representation choices, language internals, generated code, performance, proofs when required, and keeping the edit-check loop fast.
+description: Guidelines for building efficient, maintainable software in Bend. Use when designing or implementing Bend libraries, algorithms, cryptography, serialization, or data structures; covers representation choices, language internals, generated code, performance, and proofs when required.
 ---
 
 # Build good software in Bend
@@ -59,21 +59,6 @@ Keep the user's laws and semantics stable. Prove the actual exported implementat
 Do not add axioms, unsafe declarations, admitted holes, or a specification that calls the implementation it is supposed to validate. Run the kernel gate and use targeted mutations to check that claimed properties detect real mistakes. A timeout is not a logical rejection.
 
 Be exact about what is established: universal public-API refinement, a component/model theorem, an unproved representation bridge, or finite differential tests. Keep the trusted compiler, runtime, toolchain, and hardware explicit. Functional correctness does not establish cryptographic security, constant-time execution, or compiler correctness.
-
-## Be impatient: keep the loop fast
-
-Slow iteration is the most expensive bug in a Bend project. Proof checking, regeneration and queueing can quietly turn a one-line fix into an hour and a half. Treat that as a defect to fix, not weather to wait out.
-
-- **Measure the loop first, then again whenever it feels slow.** Time every stage of one real iteration: edit, regenerate, check, failure localization, queueing. Write the numbers down. If checking (or anything around it) is more than half of the loop, or one iteration takes over about five minutes, stop the feature work and optimize the tooling before continuing. Report the before and after in seconds.
-- **Iterate on the smallest thing that can fail.** Check the single file you touched before any full run. Regenerate only the generators whose inputs changed, in one pass. Run the full check only when the single files pass, and batch several fixes into one full run.
-- **Do not localize failures while iterating.** Bisecting a failed group can cost more than the run itself. Read the failing log directly; localize only for the final gate.
-- **Group files so shared modules are checked once.** Import-only umbrella files that pull in many roots make each shared module check once per group instead of once per importing file. This gave a 10x or better wall-time cut on a large proof tree. Keep every file covered, and test soundness with a planted wrong proof.
-- **Shorten the critical path.** A full run takes as long as its slowest group. Find that file and split it into independent parts, or move its shared setup into a lemma checked once. Look at per-file seconds and peak memory, not only the total.
-- **Make generators idempotent.** If a regenerate step needs more than two passes to reach a fixed point, two generators are undoing each other's output. Fix the cycle. Never pay for a fixpoint you can remove.
-- **Cache for the dev loop only.** A module cache or incremental checker is fine for iteration if it is kept out of every gate, stamp, and claim, and the docs say so. A result that depends on a cache is not evidence.
-- **Do not queue for what does not need a lock.** Reserve one-at-a-time locks for heavy full runs; let single-file checks run freely within memory limits. Cap memory and parallelism so a crowded machine does not stall everyone, and run heavy checks on the machine set aside for them.
-- **Write proofs that check fast.** Bend's `Nat` is unary, so comparing two spellings of a large number makes the checker recurse once per unit, and deep recursion overflows the stack, sometimes only under load. State each large constant once, keep sizes symbolic, reach big literals through an equality test instead of a conversion, put the small operand first in additions, and split big proofs into lemmas. Keep every conversion far below the stack limit, and gate with a run at a reduced stack budget so nothing sits near the edge.
-- **Never trade soundness for speed.** Shortcuts change how you iterate, not what counts as checked. The final gate stays the full, uncached, fully localized check with every pinned tool.
 
 ## Deliver something usable
 
